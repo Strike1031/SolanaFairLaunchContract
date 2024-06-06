@@ -210,7 +210,7 @@ mod token_minter {
 
     pub fn add_liquidity(ctx: Context<AddLiquidity>, sol_price: u64) -> Result<()> {
         let init_coin_amount = ctx.accounts.global_info.target_lp_amount * 1e9 as u64 / sol_price / 1000;
-        let init_pc_amount = ctx.accounts.token_pools.token_reserve * init_coin_amount / ctx.accounts.token_pools.sol_reserve;
+        let init_pc_amount = ctx.accounts.token_pools.token_reserve / ctx.accounts.token_pools.sol_reserve * init_coin_amount; 
 
         **ctx.accounts.escrow_account.try_borrow_mut_lamports()? -= init_coin_amount;
         **ctx.accounts.user_token_pc.try_borrow_mut_lamports()? += init_coin_amount;
