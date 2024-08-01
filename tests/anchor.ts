@@ -21,7 +21,7 @@ describe("Test Minter", () => {
   const TOKEN_POOL_SEED = "token_pool";
   const SOL_VAULT_SEED = "sol_escrow_seed";
 
-  const tokenName = "great"
+  const tokenName = "great123"
   // Data for our tests
   const payer = program.provider.publicKey;
   const metadata = {
@@ -128,6 +128,7 @@ describe("Test Minter", () => {
       buyerTokenAccount: destination,
       tokenProgram: anchor.utils.token.TOKEN_PROGRAM_ID,
       systemProgram: web3.SystemProgram.programId,
+      associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
     };
     console.log("destination", destination.toBase58());
     const txHash = await program.methods
@@ -180,6 +181,38 @@ describe("Test Minter", () => {
     };
     const txHash = await program.methods
       .withdrawBalance(new BN(0.05 * 10 ** metadata.decimals))
+      .accounts(context)
+      .rpc()
+      .catch(e => console.log(e));
+
+    await program.provider.connection.confirmTransaction(txHash, "finalized");
+    console.log(`  https://explorer.solana.com/tx/${txHash}?cluster=devnet`);
+  });
+
+  it("add liquidity", async () => {
+    const userTokenCoin = await anchor.utils.token.associatedAddress({
+      mint: mint,
+      owner: payer,
+    });
+    const userTokenPc = await anchor.utils.token.associatedAddress({
+      mint: new web3.PublicKey("So11111111111111111111111111111111111111112"),
+      owner: payer,
+    });
+    const context = {
+      mint,
+      userTokenCoin,
+      userTokenPc,
+      tokenVault,
+      escrowAccount,
+      payer,
+      globalInfo,
+      tokenPools, 
+      tokenProgram: anchor.utils.token.TOKEN_PROGRAM_ID,
+      systemProgram: web3.SystemProgram.programId,
+      associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
+    };
+    const txHash = await program.methods
+      .addLiquidity(new BN(100000000))
       .accounts(context)
       .rpc()
       .catch(e => console.log(e));

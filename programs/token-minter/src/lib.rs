@@ -12,7 +12,7 @@ use solana_program::program::invoke;
 use solana_program::system_instruction::transfer;
 
 // 2. Declare Program ID (SolPG will automatically update this when you deploy)
-declare_id!("2zP1cXE8o6dBDuNwfxoHgydP7ufn5sBibShiuv86RJ5b");
+declare_id!("6Lss5AKnmkRPg7fmfRDXWMszrxcVzj9fEf9BH7iwBcQ2");
 
 pub const GLOBAL_INFO_SEED: &str = "global_info";
 pub const TOKEN_POOL_SEED: &str = "token_pool";
@@ -27,7 +27,12 @@ pub fn calculate_fee(amount: u64, fee_percent: u32) -> u64 {
 }
 
 pub fn get_price(sol_reserve: u64, token_reserve: u64) -> u64 {
-    sol_reserve * 1e9 as u64 / token_reserve
+    // Multiply sol_reserve by 1_000_000_000 (1e9 in integer form) to avoid floating-point operations
+    let sol_reserve_scaled = sol_reserve as u128 * 1_000_000_000u128;
+    let token_reserve_scaled = token_reserve as u128;
+
+    // Perform the division and cast back to u64
+    (sol_reserve_scaled / token_reserve_scaled) as u64
 }
 // 3. Define the program and instructions
 #[program]
@@ -104,8 +109,8 @@ mod token_minter {
         let buy_fee: u64 = calculate_fee(amount, ctx.accounts.global_info.fee_percent);
         let effective_sol: u64 = amount - buy_fee;
         let token_price: u64 = get_price(
-            ctx.accounts.token_pools.sol_reserve,
-            ctx.accounts.token_pools.token_reserve,
+            ctx.accounts.global_info.initial_amount,
+            ctx.accounts.global_info.total_supply,
         );
         let token_amount: u64 = (effective_sol * 1e9 as u64) / token_price;
 
@@ -139,6 +144,7 @@ mod token_minter {
 
         ctx.accounts.token_pools.token_reserve =
             ctx.accounts.global_info.total_supply - token_amount;
+        ctx.accounts.token_pools.sol_reserve += effective_sol;
         ctx.accounts.token_pools.launched = 0;
         ctx.accounts.global_info.token_count += 1;
 
@@ -240,7 +246,8 @@ mod token_minter {
         let init_coin_amount =
             ctx.accounts.global_info.target_lp_amount * 1e9 as u64 * 1000 / sol_price;
         let init_pc_amount = ctx.accounts.token_pools.token_reserve
-            / ctx.accounts.token_pools.sol_reserve * init_coin_amount;
+            / ctx.accounts.token_pools.sol_reserve
+            * init_coin_amount;
 
         let pda_account = ctx.accounts.escrow_account.to_account_info();
         let send_to_account = ctx.accounts.user_token_pc.to_account_info();
@@ -258,11 +265,13 @@ mod token_minter {
             },
             signer_seeds,
         );
-        
+
         token::transfer(transfer_ctx, init_pc_amount)?;
 
         **pda_account.try_borrow_mut_lamports()? -= init_coin_amount;
         **send_to_account.try_borrow_mut_lamports()? += init_coin_amount;
+
+        ctx.accounts.token_pools.launched = 1;
 
         // token::sync_native(CpiContext::new(
         //     ctx.accounts.token_program.to_account_info(),
